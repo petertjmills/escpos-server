@@ -16,18 +16,8 @@
         "aarch64-linux"
       ];
 
-      crossSystem = {
-        config = "aarch64-unknown-linux-gnu";
-        libc = "glibc";
-      };
-
       forAllSystems = nixpkgs.lib.genAttrs nativeSystems;
       nixpkgsFor = forAllSystems (system: import nixpkgs { inherit system; });
-
-      pkgsCross = import nixpkgs {
-        system = "aarch64-linux"; # adjust if you’re building on aarch64 host
-        crossSystem = crossSystem;
-      };
 
     in
     {
@@ -37,16 +27,6 @@
           pkgs = nixpkgsFor.${system};
         in
         {
-          escpos-cross = pkgsCross.buildGoModule {
-            pname = "escpos";
-            inherit version;
-            src = ./.;
-            nativeBuildInputs = with pkgsCross; [ pkg-config ];
-            buildInputs = with pkgsCross; [ libusb1 ];
-            vendorHash = "sha256-YS+N+jTFGQpMQKczTKrZ741vhuSgszrENadpE5tbLOE=";
-            CGO_ENABLED = "1";
-            goFlags = [ "-v" ];
-          };
           escpos = pkgs.buildGoModule {
             pname = "escpos";
             inherit version;
