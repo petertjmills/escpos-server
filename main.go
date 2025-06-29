@@ -55,8 +55,8 @@ func main() {
 	p := escpos.New(ep)
 	p.SetConfig(escpos.ConfigEpsonTMT20II)
 
-	for _, i := range []uint8{0, 1, 2, 3} {
-		p.Bold(true).Size(i, i).Write("I LOVE YOU!!")
+	for _, i := range []uint8{0, 1, 2, 3, 4, 5} {
+		p.Size(i, i).Write("I LOVE YOU!!")
 		p.LineFeed()
 	}
 
