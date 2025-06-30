@@ -1,0 +1,22 @@
+[
+  {
+    "label": "Run daily test",
+    "adapter": "Delve",
+    "request": "launch",
+    "mode": "debug",
+    // For Delve, the program can be a package name
+    "program": "./daily/test/main.go"
+    // "args": [],
+    // "buildFlags": [],
+  },
+  {
+    "label": "Run print markdown",
+    "adapter": "Delve",
+    "request": "launch",
+    "mode": "debug",
+    // For Delve, the program can be a package name
+    "program": "./cmd/client",
+    "args": ["-markdown", "weather.md", "-debug"]
+    // "buildFlags": [],
+  }
+]

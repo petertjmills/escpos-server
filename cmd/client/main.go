@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/petertjmills/escpos-server/escpos"
@@ -169,6 +170,8 @@ func main() {
 		serverURL = flag.String("server", "http://localhost:8080", "Server URL")
 		demo      = flag.Bool("demo", false, "Print demo receipt")
 		text      = flag.String("text", "", "Text to print")
+		// markdown  = flag.String("markdown", "", "Print markdown receipt")
+		markdown2 = flag.String("markdown2", "", "Print markdown2 receipt")
 		debug     = flag.Bool("debug", false, "Debug mode - print raw commands instead of sending to server")
 	)
 	flag.Parse()
@@ -202,8 +205,39 @@ func main() {
 		if err := p.Print(); err != nil {
 			log.Fatalf("Failed to print: %v", err)
 		}
+
+		// } else if *markdown != "" {
+		// 	// load markdown file
+		// 	data, err := os.ReadFile(*markdown)
+		// 	if err != nil {
+		// 		log.Fatalf("Failed to read markdown file: %v", err)
+		// 	}
+		// 	p.WriteMarkdown(string(data))
+		// 	p.LineFeed()
+		// 	if _, err := p.Cut(); err != nil {
+		// 		log.Fatalf("Failed to cut: %v", err)
+		// 	}
+		// 	if err := p.Print(); err != nil {
+		// 		log.Fatalf("Failed to print: %v", err)
+		// 	}
+
+	} else if *markdown2 != "" {
+		// load markdown file
+		data, err := os.ReadFile(*markdown2)
+		if err != nil {
+			log.Fatalf("Failed to read markdown file: %v", err)
+		}
+		p.WriteMarkdown2(data)
+		// p.LineFeed()
+		// if _, err := p.Cut(); err != nil {
+		// 	log.Fatalf("Failed to cut: %v", err)
+		// }
+		if err := p.Print(); err != nil {
+			log.Fatalf("Failed to print: %v", err)
+		}
+
 	} else {
-		log.Fatal("Please specify either -demo or -text")
+		log.Fatal("Please specify either -demo, -text, or -markdown")
 	}
 
 	if *debug {

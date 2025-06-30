@@ -55,6 +55,9 @@
               pkgs.gopls
               pkgs.gotools
               pkgs.go-tools
+              pkgs.dotenvx
+              pkgs.delve
+              pkgs.python312
             ];
           };
         }

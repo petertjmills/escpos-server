@@ -2,6 +2,13 @@
 
 A client-server architecture for ESC/POS thermal printers. The server handles USB communication while clients generate ESC/POS commands.
 
+# important commands
+
+```sh
+peter@raspberrypi:~ $ sudo rmmod usblp
+peter@raspberrypi:~ $ sudo ./go/bin/server
+```
+
 ## Architecture
 
 - **Server**: HTTP server that receives raw ESC/POS commands and forwards them to the USB printer
@@ -84,3 +91,45 @@ response = requests.post('http://localhost:8080/print',
 3. **Centralized USB Management**: Server handles all USB communication
 4. **Multiple Clients**: Support multiple clients sending to the same printer
 5. **Remote Printing**: Print from anywhere with internet access
+
+
+## Outputs
+
+
+```md
+# Monday 31st March 2025
+
+## Word of the Day
+Today's Word: "Innovation"
+Today's Definition: "The process of creating something new or better."
+
+# Weather
+## High
+  25°C
+  Feels Like: 23°C
+## Low
+  18°C
+  Feels Like: 17°C
+## Humidity
+  60%
+## Wind
+  10 km/h
+## MSLP
+  1013 hPa
+## UV Index
+  5
+## Rain
+10:00 50%
+15:00 70%
+
+# Today
+
+## Calendar
+
+## Todos
+
+# News
+
+# HackerNews
+
+```
