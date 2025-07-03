@@ -154,6 +154,9 @@ func (ps *PrinterServer) handlePrint(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "install-service" {
+		installService()
+	}
 	var (
 		port      = flag.String("port", "8080", "HTTP server port")
 		vendorID  = flag.Uint("vendor", 0x04b8, "USB vendor ID")
