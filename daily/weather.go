@@ -73,8 +73,8 @@ type WeatherPoint struct {
 	Mslp                      int     `json:"mslp"`
 	UvIndex                   int     `json:"uvIndex"`
 	SignificantWeatherCode    int     `json:"significantWeatherCode"`
-	PrecipitationRate         int     `json:"precipitationRate"`
-	TotalPrecipAmount         int     `json:"totalPrecipAmount"`
+	PrecipitationRate         float64 `json:"precipitationRate"`
+	TotalPrecipAmount         float64 `json:"totalPrecipAmount"`
 	TotalSnowAmount           int     `json:"totalSnowAmount"`
 	ProbOfPrecipitation       int     `json:"probOfPrecipitation"`
 }

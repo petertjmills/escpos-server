@@ -4,12 +4,66 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sync"
 
 	"github.com/google/gousb"
 )
+
+const systemdService = `[Unit]
+Description=ESC/POS USB Printer Server
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=%s
+ExecStartPre=/usr/bin/sudo /sbin/rmmod usblp
+ExecStart=%s --port 8080 --vendor 0x04b8 --product 0x0e15
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+`
+
+func installService() {
+	execPath, err := os.Executable()
+	if err != nil {
+		log.Fatalf("Failed to get executable path: %v", err)
+	}
+	execPath, _ = filepath.EvalSymlinks(execPath)
+	workingDir := filepath.Dir(execPath)
+
+	serviceContent := fmt.Sprintf(systemdService, workingDir, execPath)
+	servicePath := "/etc/systemd/system/escpos-server.service"
+
+	// Write the service file
+	if err := ioutil.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
+		log.Fatalf("Failed to write service file: %v", err)
+	}
+	fmt.Println("Systemd service file written to", servicePath)
+
+	// Reload systemd
+	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
+		log.Fatalf("Failed to reload systemd: %v", err)
+	}
+	// Enable service
+	if err := exec.Command("systemctl", "enable", "escpos-server").Run(); err != nil {
+		log.Fatalf("Failed to enable service: %v", err)
+	}
+	// Start service
+	if err := exec.Command("systemctl", "restart", "escpos-server").Run(); err != nil {
+		log.Fatalf("Failed to start service: %v", err)
+	}
+	fmt.Println("escpos-server service installed and started.")
+	os.Exit(0)
+}
 
 type PrinterServer struct {
 	ctx      *gousb.Context

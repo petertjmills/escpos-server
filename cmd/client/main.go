@@ -10,7 +10,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/joho/godotenv"
+	dailyFns "github.com/petertjmills/escpos-server/daily"
 	"github.com/petertjmills/escpos-server/escpos"
 )
 
@@ -104,74 +107,12 @@ func (dw *DebugWriter) PrettyPrint() string {
 	return result.String()
 }
 
-func demoReceipt(p *escpos.Escpos) error {
-	// Header
-	p.Justify(escpos.JustifyCenter)
-	p.Size(2, 2).Write("DEMO RECEIPT\n")
-	p.Size(1, 1)
-	p.LineFeed()
-
-	// Reset alignment
-	p.Justify(escpos.JustifyLeft)
-
-	// Date and time
-	p.Write("Date: 2025-01-17\n")
-	p.Write("Time: 14:30:00\n")
-	p.LineFeed()
-
-	// Items
-	p.Bold(true)
-	p.Write("Items:\n")
-	p.Bold(false)
-	p.Write("--------------------------------\n")
-	p.Write("Coffee                    $3.50\n")
-	p.Write("Sandwich                  $8.00\n")
-	p.Write("Cookie                    $2.50\n")
-	p.Write("--------------------------------\n")
-
-	// Total
-	p.Bold(true)
-	p.Write("Total:                   $14.00\n")
-	p.Bold(false)
-	p.LineFeed()
-
-	// Footer
-	p.Justify(escpos.JustifyCenter)
-	p.Write("Thank you for your purchase!\n")
-	p.LineFeed()
-
-	// Barcode
-	if _, err := p.EAN13("123456789012"); err != nil {
-		return err
-	}
-	p.LineFeed()
-
-	// QR Code
-	if _, err := p.QRCode("https://example.com", false, 6, escpos.QRCodeErrorCorrectionLevelM); err != nil {
-		return err
-	}
-	p.LineFeed()
-
-	// Cut
-	if _, err := p.Cut(); err != nil {
-		return err
-	}
-
-	// Ensure buffer is flushed
-	if err := p.Print(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func main() {
 	var (
 		serverURL = flag.String("server", "http://localhost:8080", "Server URL")
-		demo      = flag.Bool("demo", false, "Print demo receipt")
 		text      = flag.String("text", "", "Text to print")
-		// markdown  = flag.String("markdown", "", "Print markdown receipt")
-		markdown2 = flag.String("markdown2", "", "Print markdown2 receipt")
+		markdown  = flag.String("markdown", "", "Print receipt from markdown")
+		daily     = flag.Bool("daily", false, "Print daily receipt")
 		debug     = flag.Bool("debug", false, "Debug mode - print raw commands instead of sending to server")
 	)
 	flag.Parse()
@@ -192,11 +133,7 @@ func main() {
 	p := escpos.New(writer)
 	p.SetConfig(escpos.ConfigEpsonTMT20II)
 
-	if *demo {
-		if err := demoReceipt(p); err != nil {
-			log.Fatalf("Failed to generate demo receipt: %v", err)
-		}
-	} else if *text != "" {
+	if *text != "" {
 		p.Write(*text)
 		p.LineFeed()
 		if _, err := p.Cut(); err != nil {
@@ -206,36 +143,46 @@ func main() {
 			log.Fatalf("Failed to print: %v", err)
 		}
 
-		// } else if *markdown != "" {
-		// 	// load markdown file
-		// 	data, err := os.ReadFile(*markdown)
-		// 	if err != nil {
-		// 		log.Fatalf("Failed to read markdown file: %v", err)
-		// 	}
-		// 	p.WriteMarkdown(string(data))
-		// 	p.LineFeed()
-		// 	if _, err := p.Cut(); err != nil {
-		// 		log.Fatalf("Failed to cut: %v", err)
-		// 	}
-		// 	if err := p.Print(); err != nil {
-		// 		log.Fatalf("Failed to print: %v", err)
-		// 	}
-
-	} else if *markdown2 != "" {
+	} else if *markdown != "" {
 		// load markdown file
-		data, err := os.ReadFile(*markdown2)
+		data, err := os.ReadFile(*markdown)
 		if err != nil {
 			log.Fatalf("Failed to read markdown file: %v", err)
 		}
-		p.WriteMarkdown2(data)
-		// p.LineFeed()
-		// if _, err := p.Cut(); err != nil {
-		// 	log.Fatalf("Failed to cut: %v", err)
-		// }
+		p.WriteMarkdown(data)
+		p.LineFeed()
+		if _, err := p.Cut(); err != nil {
+			log.Fatalf("Failed to cut: %v", err)
+		}
 		if err := p.Print(); err != nil {
 			log.Fatalf("Failed to print: %v", err)
 		}
+	} else if *daily {
+		// open .env file if it's there and set os env vars
+		if err := godotenv.Load(); err != nil {
+			fmt.Println("Error loading .env file:", err)
+		}
+		// print current day like monday 25th July 2025
+		p.WriteMarkdown(fmt.Appendf([]byte("### "), time.Now().Format("Monday, 2 January 2006")))
 
+		dailyWotd, _ := dailyFns.GetWordOfTheDay()
+		p.WriteMarkdown([]byte(dailyWotd))
+		dailyWeather := dailyFns.GetWeatherMD()
+		p.WriteMarkdown([]byte(dailyWeather))
+		dailyNews, _ := dailyFns.GetNews()
+		p.WriteMarkdown([]byte(dailyNews))
+		pollen, _ := dailyFns.GetPollenCount()
+		p.WriteMarkdown([]byte(pollen))
+		hn, _ := dailyFns.GetHackerNewsFront()
+		p.WriteMarkdown([]byte(hn))
+
+		p.LineFeed()
+		if _, err := p.Cut(); err != nil {
+			log.Fatalf("Failed to cut: %v", err)
+		}
+		if err := p.Print(); err != nil {
+			log.Fatalf("Failed to print: %v", err)
+		}
 	} else {
 		log.Fatal("Please specify either -demo, -text, or -markdown")
 	}

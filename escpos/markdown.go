@@ -1,215 +1,234 @@
 package escpos
 
 import (
+	"bytes"
 	"fmt"
-	"regexp"
-	"strconv"
-	"strings"
+	"math"
+
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	extast "github.com/yuin/goldmark/extension/ast"
+	"github.com/yuin/goldmark/renderer"
+	"github.com/yuin/goldmark/util"
 )
 
-func (e *Escpos) ResetStyles() {
-	e.Style = Style{
-		Bold:       false,
-		Width:      1,
-		Height:     1,
-		Reverse:    false,
-		UpsideDown: false,
-		Rotate:     false,
-		Justify:    JustifyLeft,
-	}
+const (
+	CharacterWidth uint8 = 48
+)
+
+type escr struct {
 }
 
-// WriteMarkdown parses markdown text and converts it to ESC/POS commands
-func (e *Escpos) WriteMarkdown(markdown string) (int, error) {
-	lines := strings.Split(markdown, "\n")
-	totalWritten := 0
+func (r *escr) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	// blocks
 
-	// Save current style to restore later
-	originalStyle := e.Style
+	reg.Register(ast.KindDocument, r.renderDocument)
+	reg.Register(ast.KindHeading, r.renderHeading)
+	// reg.Register(ast.KindBlockquote, r.renderBlockquote)
+	// reg.Register(ast.KindCodeBlock, r.renderCodeBlock)
+	// reg.Register(ast.KindFencedCodeBlock, r.renderFencedCodeBlock)
+	// reg.Register(ast.KindHTMLBlock, r.renderHTMLBlock)
+	// reg.Register(ast.KindList, r.renderList)
+	// reg.Register(ast.KindListItem, r.renderListItem)
+	// reg.Register(ast.KindParagraph, r.renderParagraph)
+	// reg.Register(ast.KindTextBlock, r.renderTextBlock)
+	// reg.Register(ast.KindThematicBreak, r.renderThematicBreak)
+	reg.Register(extast.KindTable, r.renderTable)
+	reg.Register(extast.KindTableHeader, r.renderTableHeader)
+	reg.Register(extast.KindTableRow, r.renderTableRow)
+	reg.Register(extast.KindTableCell, r.renderTableCell)
+	// inlines
+	// reg.Register(ast.KindAutoLink, r.renderAutoLink)
+	// reg.Register(ast.KindCodeSpan, r.renderCodeSpan)
+	// reg.Register(ast.KindEmphasis, r.renderEmphasis)
+	// reg.Register(ast.KindImage, r.renderImage)
+	// reg.Register(ast.KindLink, r.renderLink)
+	// reg.Register(ast.KindRawHTML, r.renderRawHTML)
+	reg.Register(ast.KindText, r.renderText)
+	reg.Register(ast.KindString, r.renderString)
+}
 
-	for i, line := range lines {
-		written, err := e.processMarkdownLine(line)
-		if err != nil {
-			return totalWritten, err
+func (r *escr) renderDocument(writer util.BufWriter, source []byte, n ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		// Don't cut at the end for now...
+		// writer.Write([]byte{gs, 'V', 'A', 0x00})
+		return ast.WalkContinue, nil
+	}
+	return ast.WalkContinue, nil
+}
+
+func (r *escr) renderText(writer util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		writer.Write([]byte{'\n'})
+		return ast.WalkContinue, nil
+	}
+	n := node.(*ast.Text)
+	segment := n.Segment
+
+	if n.IsRaw() {
+		writer.Write(segment.Value(source))
+	} else {
+		value := segment.Value(source)
+		writer.Write(value)
+	}
+
+	return ast.WalkContinue, nil
+}
+
+func (r *escr) renderString(writer util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	n := node.(*ast.String)
+	writer.Write(n.Value)
+
+	return ast.WalkContinue, nil
+}
+
+func (r *escr) renderHeading(writer util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	n := node.(*ast.Heading)
+	level := uint8(6 - n.Level)
+
+	if entering {
+		writer.Write([]byte{gs, '!', (level << 4) | (level)})
+	} else {
+		writer.Write([]byte{gs, '!', (0 << 4) | (0)})
+		writer.Write([]byte{0x0A})
+	}
+
+	return ast.WalkContinue, nil
+}
+
+func (r *escr) renderTable(writer util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	return ast.WalkContinue, nil
+}
+func (r *escr) renderTableHeader(writer util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		writer.Write([]byte{'\n'})
+		return ast.WalkContinue, nil
+	}
+	return ast.WalkContinue, nil
+}
+func (r *escr) renderTableRow(writer util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		writer.Write([]byte{'\n'})
+		return ast.WalkContinue, nil
+	}
+
+	return ast.WalkContinue, nil
+}
+
+// Skips children as it only processes text
+func (r *escr) renderTableCell(writer util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkSkipChildren, nil
+	}
+	if node.ChildCount() != 1 {
+		fmt.Println("Invalid table cell. Too many children")
+		fmt.Println(node.ChildCount())
+		return ast.WalkSkipChildren, nil
+	}
+	n := node.FirstChild().(*ast.Text)
+	segment := n.Segment
+
+	// Write the cell content
+	var cellContent []byte
+	if n.IsRaw() {
+		cellContent = segment.Value(source)
+	} else {
+		cellContent = segment.Value(source)
+	}
+	writer.Write(cellContent)
+
+	// Calculate column widths and current column index
+	tableNode := node.Parent().Parent() // Get the table node
+	var columnWidths []int
+	var currentCol int
+
+	// First pass: calculate maximum width for each column
+	ast.Walk(tableNode, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		totalWritten += written
+		if n.Kind() == extast.KindTableRow {
+			colIndex := 0
+			for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+				if child.Kind() == extast.KindTableCell {
+					if child.FirstChild() != nil && child.FirstChild().Kind() == ast.KindText {
+						cellText := child.FirstChild().(*ast.Text)
+						cellLen := len(cellText.Segment.Value(source))
 
-		// Add line feed except for the last line
-		if i < len(lines)-1 {
-			lfWritten, err := e.LineFeed()
-			if err != nil {
-				return totalWritten, err
+						// Extend columnWidths slice if necessary
+						for len(columnWidths) <= colIndex {
+							columnWidths = append(columnWidths, 0)
+						}
+
+						if cellLen > columnWidths[colIndex] {
+							columnWidths[colIndex] = cellLen
+						}
+					}
+					colIndex++
+				}
 			}
-			totalWritten += lfWritten
+		}
+		return ast.WalkContinue, nil
+	})
+
+	// Find current column index
+	currentCol = 0
+	for child := node.Parent().FirstChild(); child != nil && child != node; child = child.NextSibling() {
+		if child.Kind() == extast.KindTableCell {
+			currentCol++
 		}
 	}
-	// Restore original style
-	e.Style = originalStyle
-	return totalWritten, nil
+
+	// Calculate tabs needed for this cell
+	if currentCol < len(columnWidths) {
+		currentCellLen := len(cellContent)
+		maxColWidth := columnWidths[currentCol]
+
+		// Calculate which tab stop this column should end at
+		// Tab stops are at positions 8, 16, 24, 32, etc.
+		tabStop := int(math.Ceil(float64(maxColWidth+1)/8.0)) * 8
+
+		// Calculate how many characters we need to reach that tab stop
+		charsToNextTab := tabStop - currentCellLen
+
+		// Convert to number of tabs needed
+		tabsNeeded := int(math.Ceil(float64(charsToNextTab) / 8.0))
+
+		// Ensure at least 1 tab for column separation
+		if tabsNeeded < 1 {
+			tabsNeeded = 1
+		}
+
+		// Write the tabs
+		for i := 0; i < tabsNeeded; i++ {
+			writer.Write([]byte{0x09})
+		}
+	}
+
+	return ast.WalkSkipChildren, nil
 }
 
-// processMarkdownLine processes a single line of markdown
-func (e *Escpos) processMarkdownLine(line string) (int, error) {
-	e.ResetStyles()
-	// Trim leading and trailing whitespace
-	line = strings.TrimSpace(line)
+var EscposNodeRenderer renderer.NodeRenderer = &escr{}
 
-	// Skip empty lines
-	if line == "" {
-		return 0, nil
+func (e *Escpos) WriteMarkdown(markdown []byte) (int, error) {
+	md := goldmark.New(
+		goldmark.WithExtensions(extension.Table),
+		goldmark.WithRenderer(
+			renderer.NewRenderer(renderer.WithNodeRenderers(util.Prioritized(EscposNodeRenderer, 1))),
+		),
+	)
+	var buf bytes.Buffer
+	if err := md.Convert(markdown, &buf); err != nil {
+		panic(err)
 	}
 
-	// Handle headers
-	if headerMatch := regexp.MustCompile(`^(#{1,6})\s+(.+)$`).FindStringSubmatch(line); headerMatch != nil {
-		return e.processHeader(len(headerMatch[1]), headerMatch[2])
-	}
-
-	// Handle horizontal rules
-	if matched, _ := regexp.MatchString(`^-{3,}$|^\*{3,}$|^_{3,}$`, line); matched {
-		return e.processHorizontalRule()
-	}
-
-	// Handle unordered lists
-	if listMatch := regexp.MustCompile(`^[\s]*[-\*]\s+(.+)$`).FindStringSubmatch(line); listMatch != nil {
-		return e.processUnorderedListItem(listMatch[1])
-	}
-
-	// Handle ordered lists
-	if listMatch := regexp.MustCompile(`^[\s]*(\d+)\.\s+(.+)$`).FindStringSubmatch(line); listMatch != nil {
-		num, _ := strconv.Atoi(listMatch[1])
-		return e.processOrderedListItem(num, listMatch[2])
-	}
-
-	// Handle code blocks (simplified - just detect ``` lines)
-	if matched, _ := regexp.MatchString("^```", line); matched {
-		// For simplicity, just print the line as-is for code block delimiters
-		return e.Write(line)
-	}
-
-	// Handle regular text with inline formatting
-	return e.processInlineFormatting(line)
-}
-
-// processHeader handles markdown headers
-func (e *Escpos) processHeader(level int, text string) (int, error) {
-	// Reset style
-	e.ResetStyles()
-
-	// Set size based on header level (larger for smaller level numbers)
-	switch level {
-	case 1:
-		e.Size(5, 5) // Largest
-		e.Bold(true)
-	case 2:
-		e.Size(4, 4)
-		e.Bold(true)
-	case 3:
-		e.Size(3, 3)
-		e.Bold(true)
-	case 4:
-		e.Size(2, 2)
-		e.Bold(true)
-	case 5:
-		e.Size(2, 1)
-		e.Bold(true)
-	case 6:
-		e.Size(1, 1)
-		e.Bold(true)
-		e.Underline(1)
-	}
-
-	// Center align headers
-	// e.Justify(JustifyLeft)
-
-	written, err := e.Write(text)
-	if err != nil {
-		return written, err
-	}
-
-	// Add extra line feed after headers
-	lfWritten, err := e.LineFeed()
-	if err != nil {
-		return written, err
-	}
-
-	// Reset style and center align
-	e.ResetStyles()
-
-	return written + lfWritten, nil
-}
-
-// processHorizontalRule handles horizontal rules
-func (e *Escpos) processHorizontalRule() (int, error) {
-	// Reset style and center align
-	e.ResetStyles()
-	e.Justify(JustifyCenter)
-
-	return e.Write("----------------------------------------")
-}
-
-// processUnorderedListItem handles unordered list items
-func (e *Escpos) processUnorderedListItem(text string) (int, error) {
-	// Reset style and left align
-	e.ResetStyles()
-	e.Justify(JustifyLeft)
-
-	// Process inline formatting in the list item text
-	formattedText, err := e.formatInlineText(text)
+	_, err := e.WriteRaw(buf.Bytes())
 	if err != nil {
 		return 0, err
 	}
-
-	return e.Write("• " + formattedText)
-}
-
-// processOrderedListItem handles ordered list items
-func (e *Escpos) processOrderedListItem(num int, text string) (int, error) {
-	// Reset style and left align
-	e.ResetStyles()
-	e.Justify(JustifyLeft)
-
-	// Process inline formatting in the list item text
-	formattedText, err := e.formatInlineText(text)
-	if err != nil {
-		return 0, err
-	}
-
-	return e.Write(fmt.Sprintf("%d. %s", num, formattedText))
-}
-
-// processInlineFormatting handles regular text with inline formatting
-func (e *Escpos) processInlineFormatting(line string) (int, error) {
-	// Reset style and left align
-	e.ResetStyles()
-	e.Justify(JustifyLeft)
-
-	formattedText, err := e.formatInlineText(line)
-	if err != nil {
-		return 0, err
-	}
-
-	return e.Write(formattedText)
-}
-
-// formatInlineText processes inline markdown formatting and returns plain text
-// Note: This is a simplified implementation that removes markdown syntax
-// For a full implementation, you'd want to apply formatting in real-time
-func (e *Escpos) formatInlineText(text string) (string, error) {
-	// Remove bold formatting (**text** and __text__)
-	boldRegex := regexp.MustCompile(`\*\*([^*]+)\*\*|__([^_]+)__`)
-	text = boldRegex.ReplaceAllString(text, "$1$2")
-
-	// Remove italic formatting (*text* and _text_)
-	italicRegex := regexp.MustCompile(`\*([^*]+)\*|_([^_]+)_`)
-	text = italicRegex.ReplaceAllString(text, "$1$2")
-
-	// Remove strikethrough (~~text~~)
-	strikeRegex := regexp.MustCompile(`~~([^~]+)~~`)
-	text = strikeRegex.ReplaceAllString(text, "$1")
-
-	// Remove inline code (`text`)
-	codeRegex := regexp.MustCompile("`([^`]+)`")
-	text = codeRegex.ReplaceAllString(text, "$1")
-
-	return text, nil
+	return 0, nil
 }
