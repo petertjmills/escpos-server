@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -23,7 +22,6 @@ After=network.target
 Type=simple
 User=pi
 WorkingDirectory=%s
-ExecStartPre=/usr/bin/sudo /sbin/rmmod usblp
 ExecStart=%s --port 8080 --vendor 0x04b8 --product 0x0e15
 Restart=on-failure
 RestartSec=5
@@ -33,6 +31,11 @@ WantedBy=multi-user.target
 `
 
 func installService() {
+	// Check if running as root
+	if os.Geteuid() != 0 {
+		log.Fatal("install-service must be run as root (use sudo)")
+	}
+
 	execPath, err := os.Executable()
 	if err != nil {
 		log.Fatalf("Failed to get executable path: %v", err)
@@ -40,11 +43,21 @@ func installService() {
 	execPath, _ = filepath.EvalSymlinks(execPath)
 	workingDir := filepath.Dir(execPath)
 
+	// Blacklist usblp module
+	blacklistContent := "# Blacklist usblp module to allow direct USB printer access\nblacklist usblp\n"
+	if err := os.WriteFile("/etc/modprobe.d/blacklist-usblp.conf", []byte(blacklistContent), 0644); err != nil {
+		log.Fatalf("Failed to write blacklist file: %v", err)
+	}
+	fmt.Println("Blacklisted usblp module")
+
+	// Remove usblp if currently loaded
+	exec.Command("rmmod", "usblp").Run() // Ignore errors
+
 	serviceContent := fmt.Sprintf(systemdService, workingDir, execPath)
 	servicePath := "/etc/systemd/system/escpos-server.service"
 
 	// Write the service file
-	if err := ioutil.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
+	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
 		log.Fatalf("Failed to write service file: %v", err)
 	}
 	fmt.Println("Systemd service file written to", servicePath)
@@ -58,10 +71,11 @@ func installService() {
 		log.Fatalf("Failed to enable service: %v", err)
 	}
 	// Start service
-	if err := exec.Command("systemctl", "restart", "escpos-server").Run(); err != nil {
+	if err := exec.Command("systemctl", "start", "escpos-server").Run(); err != nil {
 		log.Fatalf("Failed to start service: %v", err)
 	}
 	fmt.Println("escpos-server service installed and started.")
+	fmt.Println("Note: You may need to reboot for the usblp blacklist to take full effect.")
 	os.Exit(0)
 }
 
