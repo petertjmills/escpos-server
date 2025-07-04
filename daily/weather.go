@@ -12,7 +12,7 @@ import (
 )
 
 var WEATHERTEMPLATE = `
-### Weather
+#### Weather
 | High/feels like | {{.HighTemp}}C/{{.HighFeelsLike}}C |
 |---|---|
 | Low/feels like | {{.LowTemp}}C/{{.LowFeelsLike}}C |

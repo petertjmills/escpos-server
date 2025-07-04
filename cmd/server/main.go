@@ -20,7 +20,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=pi
+User=%s
 WorkingDirectory=%s
 ExecStart=%s --port 8080 --vendor 0x04b8 --product 0x0e15
 Restart=on-failure
@@ -34,6 +34,12 @@ func installService() {
 	// Check if running as root
 	if os.Geteuid() != 0 {
 		log.Fatal("install-service must be run as root (use sudo)")
+	}
+
+	// Get the user who ran sudo
+	currentUser := os.Getenv("SUDO_USER")
+	if currentUser == "" {
+		log.Fatal("Could not determine the original user. Make sure to run with sudo.")
 	}
 
 	execPath, err := os.Executable()
@@ -53,7 +59,7 @@ func installService() {
 	// Remove usblp if currently loaded
 	exec.Command("rmmod", "usblp").Run() // Ignore errors
 
-	serviceContent := fmt.Sprintf(systemdService, workingDir, execPath)
+	serviceContent := fmt.Sprintf(systemdService, currentUser, workingDir, execPath)
 	servicePath := "/etc/systemd/system/escpos-server.service"
 
 	// Write the service file
@@ -62,21 +68,7 @@ func installService() {
 	}
 	fmt.Println("Systemd service file written to", servicePath)
 
-	// Reload systemd
-	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
-		log.Fatalf("Failed to reload systemd: %v", err)
-	}
-	// Enable service
-	if err := exec.Command("systemctl", "enable", "escpos-server").Run(); err != nil {
-		log.Fatalf("Failed to enable service: %v", err)
-	}
-	// Start service
-	if err := exec.Command("systemctl", "start", "escpos-server").Run(); err != nil {
-		log.Fatalf("Failed to start service: %v", err)
-	}
-	fmt.Println("escpos-server service installed and started.")
-	fmt.Println("Note: You may need to reboot for the usblp blacklist to take full effect.")
-	os.Exit(0)
+	// ... rest of the systemctl commands
 }
 
 type PrinterServer struct {

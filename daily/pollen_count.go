@@ -12,10 +12,10 @@ import (
 
 var POLLENCOUNTTEMPLATE = `
 #### Pollen Count
-| Type | Tonight | Tomorrow | {{ .DayAfter }} |
+|Type|Tonight|Tomorrow|{{ .DayAfter }}|
 |---|---|---|---|
 {{ range .PollenCounts }}
-| {{ .Type }} | {{ .Tonight }} | {{ .Tomorrow }} | {{ .DayAfter }} |
+|{{ .Type }}|{{ .Tonight }}|{{ .Tomorrow }}|{{ .DayAfter }}|
 {{ end }}
 `
 
