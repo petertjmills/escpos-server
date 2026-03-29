@@ -37,6 +37,18 @@
             CGO_ENABLED = "1";
             goFlags = [ "-v" ];
           };
+
+          escpos-print = pkgs.buildGoModule {
+            pname = "escpos-print";
+            inherit version;
+            src = ./.;
+            subPackages = [ "cmd/escpos-print" ];
+            nativeBuildInputs = with pkgs; [ pkg-config ];
+            buildInputs = with pkgs; [ libusb1 ];
+            vendorHash = "sha256-Q3daq+q3drgnUPd6fHe+3H96B2T1dFdHu5a/Eejyyz4=";
+            env.CGO_ENABLED = "1";
+            goFlags = [ "-v" ];
+          };
         }
       );
 

@@ -30,8 +30,8 @@ func (r *escr) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	// reg.Register(ast.KindFencedCodeBlock, r.renderFencedCodeBlock)
 	// reg.Register(ast.KindHTMLBlock, r.renderHTMLBlock)
 	// reg.Register(ast.KindList, r.renderList)
-	// reg.Register(ast.KindListItem, r.renderListItem)
-	// reg.Register(ast.KindParagraph, r.renderParagraph)
+	reg.Register(ast.KindListItem, r.renderListItem)
+	reg.Register(ast.KindParagraph, r.renderParagraph)
 	// reg.Register(ast.KindTextBlock, r.renderTextBlock)
 	// reg.Register(ast.KindThematicBreak, r.renderThematicBreak)
 	reg.Register(extast.KindTable, r.renderTable)
@@ -59,20 +59,10 @@ func (r *escr) renderDocument(writer util.BufWriter, source []byte, n ast.Node, 
 }
 
 func (r *escr) renderText(writer util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
-	if !entering {
-		writer.Write([]byte{'\n'})
-		return ast.WalkContinue, nil
+	if entering {
+		n := node.(*ast.Text)
+		writer.Write(n.Segment.Value(source))
 	}
-	n := node.(*ast.Text)
-	segment := n.Segment
-
-	if n.IsRaw() {
-		writer.Write(segment.Value(source))
-	} else {
-		value := segment.Value(source)
-		writer.Write(value)
-	}
-
 	return ast.WalkContinue, nil
 }
 
@@ -97,6 +87,45 @@ func (r *escr) renderHeading(writer util.BufWriter, source []byte, node ast.Node
 		writer.Write([]byte{0x0A})
 	}
 
+	return ast.WalkContinue, nil
+}
+
+// func (r *escr) renderParagraph(writer util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+// 	if !entering {
+// 		writer.Write([]byte{0x0A}) // Move to next line after paragraph ends
+// 	}
+// 	return ast.WalkContinue, nil
+// }
+
+func (r *escr) renderParagraph(writer util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	// Check if the paragraph has the ".center" attribute
+	isCentered := false
+	if n, ok := node.(*ast.Paragraph); ok {
+		if n.Attributes() != nil {
+			fmt.Println(n.Attributes())
+			for _, attr := range n.Attributes() {
+				if string(attr.Name) == "class" && string(attr.Value.([]byte)) == "center" {
+					isCentered = true
+				}
+			}
+		}
+	}
+
+	if entering && isCentered {
+		writer.Write([]byte{0x1B, 0x61, 0x01})
+	} else if !entering && isCentered {
+		writer.Write([]byte{0x0A, 0x1B, 0x61, 0x00})
+	} else if !entering {
+		// Standard non-centered paragraph
+		writer.Write([]byte{0x0A})
+	}
+	return ast.WalkContinue, nil
+}
+
+func (r *escr) renderListItem(writer util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		writer.Write([]byte{0x0A}) // Each list item gets its own line
+	}
 	return ast.WalkContinue, nil
 }
 
