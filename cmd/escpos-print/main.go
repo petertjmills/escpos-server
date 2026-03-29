@@ -33,6 +33,9 @@ func NewPrinterServer(vendorID, productID uint16) (*PrinterServer, error) {
 		return nil, fmt.Errorf("failed to open device: %w", err)
 	}
 
+	// THE FIX: Tell libusb to detach the default kernel driver (usblp)
+	dev.SetAutoDetach(true)
+
 	intf, done, err := dev.DefaultInterface()
 	if err != nil {
 		dev.Close()
